@@ -1,7 +1,7 @@
 import json
 import requests
 from fastapi import HTTPException
-
+from fastapi import FastAPI
 from backend.schemes import AdvisoryRequest
 from services.advisory_engine import generate_irrigation_advisory
 
