@@ -418,7 +418,7 @@ try:
 
     st.subheader("📅 5-Day Weather Outlook")
 
-    forecast_columns = st.columns(5)
+    forecast_columns = st.columns(3)
 
     for index, col in enumerate(forecast_columns):
 
