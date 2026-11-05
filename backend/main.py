@@ -1,3 +1,4 @@
+import os
 import json
 import requests
 from fastapi import HTTPException
@@ -417,47 +418,114 @@ def create_report(report: dict):
 @app.get("/weather")
 def get_weather(latitude: float, longitude: float):
 
-    url = "https://api.open-meteo.com/v1/forecast"
+    api_key = os.getenv("WEATHER_API_KEY")
+
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Weather API key is missing"
+        )
+
+    url = "https://api.weatherapi.com/v1/forecast.json"
 
     params = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "current": (
-            "temperature_2m,relative_humidity_2m,"
-            "apparent_temperature,precipitation,"
-            "weather_code,wind_speed_10m"
-        ),
-        "daily": (
-            "weather_code,temperature_2m_max,"
-            "temperature_2m_min,precipitation_sum,"
-            "precipitation_probability_max"
-        ),
-        "forecast_days": 5,
-        "timezone": "auto"
+        "key": api_key,
+        "q": f"{latitude},{longitude}",
+        "days": 3,
+        "aqi": "no",
+        "alerts": "no"
     }
 
     try:
         response = requests.get(
             url,
             params=params,
-            timeout=30,
-            headers={"User-Agent": "AIML-FARMER/1.0"}
+            timeout=20
         )
 
         response.raise_for_status()
+        raw = response.json()
 
-        return response.json()
+        current_data = raw["current"]
+
+        def get_weather_code(condition):
+
+            text = condition.lower()
+
+            if "thunder" in text:
+                return 95
+            elif "snow" in text:
+                return 71
+            elif "rain" in text:
+                return 61
+            elif "drizzle" in text:
+                return 51
+            elif "fog" in text or "mist" in text:
+                return 45
+            elif "overcast" in text or "cloudy" in text:
+                return 3
+            elif "partly cloudy" in text:
+                return 2
+            else:
+                return 0
+
+        current = {
+            "time": current_data["last_updated"],
+            "temperature_2m": current_data["temp_c"],
+            "relative_humidity_2m": current_data["humidity"],
+            "apparent_temperature": current_data["feelslike_c"],
+            "precipitation": current_data["precip_mm"],
+            "weather_code": get_weather_code(
+                current_data["condition"]["text"]
+            ),
+            "wind_speed_10m": current_data["wind_kph"]
+        }
+
+        daily = {
+            "time": [],
+            "weather_code": [],
+            "temperature_2m_max": [],
+            "temperature_2m_min": [],
+            "precipitation_sum": [],
+            "precipitation_probability_max": []
+        }
+
+        for day in raw["forecast"]["forecastday"]:
+
+            daily["time"].append(day["date"])
+
+            daily["weather_code"].append(
+                get_weather_code(
+                    day["day"]["condition"]["text"]
+                )
+            )
+
+            daily["temperature_2m_max"].append(
+                day["day"]["maxtemp_c"]
+            )
+
+            daily["temperature_2m_min"].append(
+                day["day"]["mintemp_c"]
+            )
+
+            daily["precipitation_sum"].append(
+                day["day"]["totalprecip_mm"]
+            )
+
+            daily["precipitation_probability_max"].append(
+                day["day"]["daily_chance_of_rain"]
+            )
+
+        return {
+            "current": current,
+            "daily": daily
+        }
 
     except requests.RequestException as e:
 
-        print("OPEN METEO ERROR:", repr(e))
-
-        if getattr(e, "response", None) is not None:
-            print("API RESPONSE:", e.response.text)
-
         raise HTTPException(
             status_code=502,
-            detail=f"Weather API error: {str(e)}"
+            detail=f"Weather service unavailable: {str(e)}"
         )
 @app.post("/hour-prediction")
 def hour_prediction(data: dict):
