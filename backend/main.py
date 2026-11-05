@@ -414,9 +414,9 @@ def create_report(report: dict):
         "message": "Report saved successfully",
         "report_id": report_id
     }
-
 @app.get("/weather")
 def get_weather(latitude: float, longitude: float):
+
     url = "https://api.open-meteo.com/v1/forecast"
 
     params = {
@@ -437,14 +437,27 @@ def get_weather(latitude: float, longitude: float):
     }
 
     try:
-        response = requests.get(url, params=params, timeout=15)
+        response = requests.get(
+            url,
+            params=params,
+            timeout=30,
+            headers={"User-Agent": "AIML-FARMER/1.0"}
+        )
+
         response.raise_for_status()
+
         return response.json()
 
     except requests.RequestException as e:
+
+        print("OPEN METEO ERROR:", repr(e))
+
+        if getattr(e, "response", None) is not None:
+            print("API RESPONSE:", e.response.text)
+
         raise HTTPException(
             status_code=502,
-            detail=f"Weather service unavailable: {str(e)}"
+            detail=f"Weather API error: {str(e)}"
         )
 @app.post("/hour-prediction")
 def hour_prediction(data: dict):
